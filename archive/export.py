@@ -39,6 +39,21 @@ class IssuedReview:
     receipt: ReviewReceipt
 
 
+@dataclass(frozen=True)
+class ReplacementBody:
+    batch_id: str
+    roster_id: str
+    forecast_accession: str
+    results_accession: str
+    forecast_revision: str
+    results_closeout: str
+    rows: tuple[ReviewRow, ...]
+    mean: Fraction
+    original_report_id: str
+    amendment_accession: str
+    amendment_chain: tuple[dict, ...]
+
+
 def _body_payload(body: ReviewBody) -> dict:
     return {
         'batch_id': body.batch_id,
@@ -91,3 +106,30 @@ def render_review_json(review: IssuedReview) -> str:
         'body': _body_payload(review.body),
         'receipt': {'report_id': review.receipt.report_id},
     })
+
+
+def replacement_payload(
+    report_id: str, body: ReplacementBody
+) -> dict:
+    """The stored form of a replacement report, reported in the V1 shape."""
+    return {
+        'report_id': report_id,
+        'body': {
+            **_body_payload(ReviewBody(
+                body.batch_id, body.roster_id, body.forecast_accession, body.results_accession,
+                body.forecast_revision, body.results_closeout, body.rows, body.mean,
+            )),
+            'original_report_id': body.original_report_id,
+            'amendment_accession': body.amendment_accession,
+            'amendment_chain': [dict(item) for item in body.amendment_chain],
+        },
+        'receipt': {'report_id': report_id},
+    }
+
+
+def encode_replacement(report_id: str, body: ReplacementBody) -> str:
+    return _json_text(replacement_payload(report_id, body))
+
+
+def decode_replacement(text: str) -> dict:
+    return json.loads(text)

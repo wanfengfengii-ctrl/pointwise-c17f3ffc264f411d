@@ -39,7 +39,27 @@ python3 -B -m examples.workday
 | `evaluation.accession.accept_piece` | `(accession, payload)` 校验并保存固定件，返回接纳号。`forecast.snapshot.forecast_piece_payload` 与 `bench.snapshot.bench_piece_payload` 生成来件。`get_accepted_piece` 按接纳号取件。 |
 | `evaluation.review.issue_review` | `(accession, archive, forecast_accession, results_accession)` 按指定顺序选件，原子签存并返回 `IssuedReview`。 |
 | `archive.lookup.read_review` | `(archive, report_id, *, as_json=False)` 按正式号返回 `IssuedReview`。`as_json=True` 返回稳定 JSON 字符串。 |
+| `bench.closeout.publish_amendment` | `(bench, batch_id, parent_id, amendment_id, rows)` 按当前链尾发布具名逐片勘误，返回可直接实收的字典。`read_amendment` 按号重领。 |
+| `evaluation.accession.amendment_status` | `(accession, accession_id)` 返回 `pending_proof`、`invalid`、`effective` 或 `superseded`。 |
+| `evaluation.review.issue_replacement` | `(accession, archive, original_report_id, amendment_accession)` 用连续勘误链复算原报告并原子签存替代件。 |
+| `evaluation.review.read_current_review` | `(accession, archive, original_report_id)` 返回 `status`、`amendment_accession`、`report`。 |
+| `archive.lookup.read_replacement` | `(archive, report_id)` 按正式号读回已签存的替代报告。 |
 
 名称使用非空白字符串，保留原字符和大小写。概率接受整数、`Fraction`、可精确解析的有理数字符串，或 `{"numerator": 1, "denominator": 4}` 表示。二值结果必须是整数 0 或 1。报告按清册顺序记录每片的概率、二值、两处来源和平方误差。全批均值等权，每片只计一次。JSON 有理表示使用整数分子和正整数分母。
 
 非法输入、同号异内容、未齐封批和选件失配报 `ValueError`。未知有效编号报 `KeyError`。等价概率行重排、重复揭盲、重封和等价来件重投均保留已提交的原身份。归档写入失败传播 SQLite 错误，正文与回执一同回滚。可以沿用原选件重试；成功后用正式号重领存值。
+
+## 正式勘误
+
+`bench` 封批后，质检员按具名勘误替换逐片实测值和出处。勘误号同批唯一，`results:` 前缀留给原封批；`parent_id` 指向原封批号或同批已发勘误号，每批只能沿一条链承接。`parent_sha256` 是父件规范正文的 SHA-256：原封批按 `bench_piece_payload` 的规范字典，勘误按发布件自身，均以 `json.dumps(..., sort_keys=True, separators=(',', ':'), ensure_ascii=True)` 的 UTF-8 字节计算。每片一次勘误至多出现一次，输出按清册序。重发同号同内容先按原父件核对并返回原件，即使链尾已经推进；异内容或另开分支报 `ValueError`。
+
+实收端可以乱序接收整条链。`pending_proof` 表示父件尚未到证，`invalid` 表示已判错配，`effective` 是当前合格末代，`superseded` 是已核实但已有后继生效。以同批、同清册、同父号及同父指纹界定同一条父子边；两个不同后继争用同一边时拒收后到件。先到的待证件若随后确认错配，不占用真正父件的后继位置。等价重投沿用首纳号。
+
+`issue_replacement` 以原 V1 报告为根，固定原预测接纳号和清册，只用该原封批连续承接的同批勘误复算。签发与归档写入在同一事务提交正文、出处、关联和回执；失败传播 SQLite 错误且不新增任何存值，可用原请求重试。每个原报告和目标勘误至多签一份替代件，已签存的同一组合可重领，无须该代仍在用。`read_current_review` 返回 `original`、`pending_recompute` 或 `replacement`；迟到的旧代替代可按号审计，但不能重新取得在用资格。
+
+```sh
+python3 -B -m examples.amendment_fixture    # 97/288 原报告
+python3 -B -m examples.amendment_scenarios  # 倒序送件、待复算、失败重试
+python3 -B -m examples.amendment_workday    # 业务演示（运行清单 demo）
+```
+

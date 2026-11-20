@@ -3,8 +3,15 @@ import sys
 import unittest
 
 
-def main():
+def build_suite():
     suite = unittest.defaultTestLoader.discover('tests', top_level_dir='.')
+    extra = unittest.defaultTestLoader.loadTestsFromName('examples.amendment_scenarios')
+    suite.addTests(extra)
+    return suite
+
+
+def main():
+    suite = build_suite()
     if suite.countTestCases():
         result = unittest.TextTestRunner(verbosity=2).run(suite)
     else:
